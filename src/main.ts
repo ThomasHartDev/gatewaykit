@@ -18,7 +18,7 @@ try {
 
 for (const warning of config.warnings) console.warn(`warning: ${warning}`)
 
-const server = createGateway()
+const server = createGateway(config)
 server.on('error', (err: NodeJS.ErrnoException) => {
   console.error(err.code === 'EADDRINUSE' ? `port ${config.port} is already in use` : `server error: ${err.message}`)
   process.exit(1)
