@@ -1,4 +1,5 @@
 import type { AddressInfo } from 'node:net'
+import { parseConfig } from '../src/config/load.ts'
 import { createGateway } from '../src/server.ts'
 
 export interface RunningGateway {
@@ -6,8 +7,8 @@ export interface RunningGateway {
   close: () => Promise<void>
 }
 
-export async function startGateway(): Promise<RunningGateway> {
-  const server = createGateway()
+export async function startGateway(yaml = 'routes: []'): Promise<RunningGateway> {
+  const server = createGateway(parseConfig(yaml))
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
   const { port } = server.address() as AddressInfo
   return {
