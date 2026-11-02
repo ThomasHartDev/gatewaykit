@@ -39,4 +39,12 @@ routes:
   it('routes the path as sent, so a leading // is not read as a host', async () => {
     assert.equal((await fetch(`${gateway.url}//evil.com/api/users`)).status, 404)
   })
+
+  it('returns 405 with an Allow header for a method the route does not list', async () => {
+    const res = await fetch(`${gateway.url}/api/users`, { method: 'DELETE' })
+
+    assert.equal(res.status, 405)
+    assert.equal(res.headers.get('allow'), 'GET, POST')
+    assert.equal((await res.json()).error, 'method_not_allowed')
+  })
 })
