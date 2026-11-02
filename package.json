@@ -7,12 +7,15 @@
     "node": ">=23.6"
   },
   "scripts": {
-    "start": "node src/main.ts",
+    "start": "node src/main.ts gateway.example.yaml",
     "test": "node --test \"test/**/*.test.ts\"",
     "typecheck": "tsc"
   },
   "devDependencies": {
     "@types/node": "24.19.2",
     "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "yaml": "2.8.1"
   }
 }
