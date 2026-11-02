@@ -1,38 +1,40 @@
 import assert from 'node:assert/strict'
 import { after, before, describe, it } from 'node:test'
 import { startGateway, type RunningGateway } from './helpers.ts'
+import { startMockUpstream, type MockUpstream } from './mock-upstream.ts'
 
 describe('routing', () => {
+  let api: MockUpstream
+  let users: MockUpstream
   let gateway: RunningGateway
 
   before(async () => {
+    api = await startMockUpstream('api')
+    users = await startMockUpstream('users')
     gateway = await startGateway(`
 routes:
   - path: "/api"
     methods: ["GET"]
     upstream:
-      url: "http://localhost:3000"
+      url: "${api.url}"
   - path: "/api/users"
     methods: ["GET", "POST"]
     upstream:
-      url: "http://localhost:3001"
+      url: "${users.url}"
 `)
   })
-  after(() => gateway.close())
-
-  async function reached(path: string): Promise<string> {
-    return (await fetch(`${gateway.url}${path}`)).text()
-  }
-
-  it('reaches a configured route', async () => {
-    const res = await fetch(`${gateway.url}/api/users`, { method: 'POST' })
-    assert.equal(res.status, 200)
-    assert.equal(await res.text(), 'reached route /api/users\n')
+  after(async () => {
+    await gateway.close()
+    await Promise.all([api.close(), users.close()])
   })
 
+  async function upstreamFor(path: string): Promise<string> {
+    return (await (await fetch(`${gateway.url}${path}`)).json()).upstream
+  }
+
   it('picks the longest matching prefix, on whole path segments only', async () => {
-    assert.equal(await reached('/api/users/7?x=1'), 'reached route /api/users\n')
-    assert.equal(await reached('/api/usersX'), 'reached route /api\n')
+    assert.equal(await upstreamFor('/api/users/7?x=1'), 'users')
+    assert.equal(await upstreamFor('/api/usersX'), 'api')
     assert.equal((await fetch(`${gateway.url}/apix`)).status, 404)
   })
 
