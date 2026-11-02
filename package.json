@@ -9,7 +9,8 @@
   "scripts": {
     "start": "node src/main.ts gateway.example.yaml",
     "test": "node --test \"test/**/*.test.ts\"",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "mock": "node scripts/mock-upstreams.ts"
   },
   "devDependencies": {
     "@types/node": "24.19.2",

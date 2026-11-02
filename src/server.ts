@@ -1,7 +1,10 @@
-import { createServer, type Server, type ServerResponse } from 'node:http'
-import type { GatewayConfig } from './config/types.ts'
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import type { GatewayConfig, RouteConfig } from './config/types.ts'
 import { buildGuards } from './guards.ts'
-import { matchRoute } from './router.ts'
+import { responseHeaders, sendUpstream, UpstreamError } from './proxy.ts'
+import { matchRoute, upstreamPath } from './router.ts'
+
+const MAX_BODY_BYTES = 1_048_576
 
 export function createGateway(config: GatewayConfig): Server {
   const startedAt = Date.now()
@@ -30,8 +33,59 @@ export function createGateway(config: GatewayConfig): Server {
       }
     }
 
-    res.writeHead(200, { 'content-type': 'text/plain' })
-    res.end(`reached route ${route.path}\n`)
+    proxyRequest(req, res, route, url).catch((err: unknown) => {
+      console.error(`unexpected error on ${req.method} ${url.pathname}:`, err)
+      if (res.headersSent) res.destroy()
+      else sendJson(res, 500, { error: 'internal_error', message: 'the gateway failed to handle this request' })
+    })
+  })
+}
+
+async function proxyRequest(req: IncomingMessage, res: ServerResponse, route: RouteConfig, url: URL): Promise<void> {
+  const body = await readBody(req, MAX_BODY_BYTES)
+  if (!body) {
+    sendJson(res, 413, { error: 'payload_too_large', message: `request bodies are limited to ${MAX_BODY_BYTES} bytes` })
+    return
+  }
+
+  try {
+    const upstreamRes = await sendUpstream(
+      route.targets[0].url,
+      {
+        method: req.method ?? 'GET',
+        path: upstreamPath(route, url),
+        headers: req.headers,
+        body,
+        clientIp: (req.socket.remoteAddress ?? 'unknown').replace(/^::ffff:/, ''),
+      },
+      route.timeoutMs,
+    )
+    res.writeHead(upstreamRes.statusCode ?? 502, responseHeaders(upstreamRes.headers))
+    upstreamRes.pipe(res)
+    upstreamRes.on('error', () => res.destroy())
+    res.on('close', () => upstreamRes.destroy())
+  } catch (err) {
+    if (!(err instanceof UpstreamError)) throw err
+    if (err.kind === 'timeout') sendJson(res, 504, { error: 'gateway_timeout', message: err.message })
+    else sendJson(res, 502, { error: 'bad_gateway', message: err.message })
+  }
+}
+
+function readBody(req: IncomingMessage, limitBytes: number): Promise<Buffer | undefined> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = []
+    let size = 0
+    req.on('data', (chunk: Buffer) => {
+      size += chunk.length
+      if (size > limitBytes) {
+        req.pause()
+        resolve(undefined)
+      } else {
+        chunks.push(chunk)
+      }
+    })
+    req.on('end', () => resolve(Buffer.concat(chunks)))
+    req.on('error', reject)
   })
 }
 

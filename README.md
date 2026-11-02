@@ -15,6 +15,8 @@ node src/main.ts path/to/gateway.yaml      # or any other config
 GATEWAY_CONFIG=path/to/gateway.yaml node src/main.ts
 ```
 
+To try the example config by hand, start mock upstreams on ports 3001 to 3006 in another terminal with `npm run mock`, then `curl localhost:8080/api/users/7`.
+
 A bad config stops the gateway at startup and lists what's wrong. Config features that aren't built yet print a warning and are ignored.
 
 ## Test it
